@@ -1,0 +1,49 @@
+// A short duel: Blue walks in, Red attacks, Blue blocks and counters.
+// Compile and preview:  npm run script -- preview examples/scripts/duel.stykscript.json
+{
+  "stykscript": 1,
+  "title": "Duel",
+  "canvas": "landscape",
+  "fps": 24,
+  "background": "#f7f7f2",
+  "ground": 440,
+  "defaults": {"ease": "smooth"},
+
+  "poses": {
+    "guard": {"base": "ready", "armR": 100, "forearmR": -70},
+    "windup": {"base": "ready", "torso": -100, "armL": 150, "forearmL": 200, "thighL": 70},
+    "uppercut": {"base": "punch", "torso": -70, "armL": -40, "forearmL": -70}
+  },
+
+  "figures": {
+    "blue": {"name": "Blue", "color": "#0d99ff", "x": 120, "y": "ground", "pose": "stand"},
+    "red": {"name": "Red", "color": "#e5484d", "x": 700, "y": "ground", "facing": "left", "pose": "guard"}
+  },
+
+  "props": {
+    "floor": {"shape": "line", "from": [0, 440], "to": [960, 440], "color": "#2b2b2b", "thickness": 4}
+  },
+
+  "timeline": [
+    {"at": 1, "id": "open", "note": "Wide shot. Blue enters from the left.",
+     "camera": {"zoom": 1}},
+    {"at": 7, "blue": {"pose": "walk1", "x": "+45", "y": "ground"}},
+    {"at": 13, "blue": {"pose": "walk2", "x": "+45", "y": "ground"}},
+    {"at": 19, "blue": {"pose": "walk1", "x": "+45", "y": "ground"}},
+    {"at": 25, "id": "faceoff", "note": "Blue raises guard; camera pushes in.",
+     "blue": {"pose": "guard", "x": "+40", "y": "ground"},
+     "camera": {"x": 520, "y": 300, "zoom": 1.35, "ease": "ease-in-out"}},
+    {"at": 37, "id": "windup", "red": {"pose": "windup", "y": "ground"}},
+    {"at": 43, "id": "attack", "note": "Red lunges with a punch.",
+     "red": {"pose": "punch", "x": "-90", "y": "ground", "ease": "ease-in"}},
+    {"at": 45, "id": "block", "blue": {"pose": "block", "x": "-10", "y": "ground"}},
+    {"at": 52, "id": "counter", "note": "Blue counters with an uppercut.",
+     "blue": {"pose": "uppercut", "x": "+30", "y": "ground", "ease": "ease-out"},
+     "red": {"pose": "hit", "x": "+40", "y": "-30"}},
+    {"at": 60, "id": "knockdown", "red": {"pose": "fall", "x": "+70", "y": "ground"},
+     "camera": {"zoom": 1.15, "x": "+40"}},
+    {"at": 70, "id": "rest", "red": {"pose": "lie", "x": "+30", "y": "ground"},
+     "blue": {"pose": "cheer", "y": "ground"}}
+  ],
+  "length": 84
+}
