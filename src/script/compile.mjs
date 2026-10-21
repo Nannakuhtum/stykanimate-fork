@@ -8,7 +8,7 @@
  * script says. See docs/AGENT-SCRIPTING.md for the format.
  */
 import {parseJsonc, lineOf, escapeKey, ScriptSyntaxError} from './jsonc.mjs';
-import {JOINTS, BUILTIN_POSES, jointName, nativeAngles, lowestOffset, forwardKinematics, blueTemplate} from './stick-rig.mjs';
+import {JOINTS, BUILTIN_POSES, LIMBS, jointName, nativeAngles, scriptPose, solveReach, lowestOffset, forwardKinematics, blueTemplate} from './stick-rig.mjs';
 import {emptyDocument, createFrame, createObject} from '../demo.mjs';
 import {ensureLayerState, LAYER_COLORS} from '../layers.mjs';
 
@@ -19,9 +19,9 @@ export const EASE_NAMES = Object.freeze({
 });
 const CANVASES = {landscape: [960, 540], portrait: [540, 960], square: [720, 720], hd: [1920, 1080]};
 const TOP_KEYS = new Set(['stykscript', 'title', 'canvas', 'fps', 'background', 'ground', 'length', 'defaults', 'poses', 'figures', 'props', 'timeline', 'notes']);
-const FIGURE_KEYS = new Set(['name', 'color', 'scale', 'x', 'y', 'facing', 'pose', 'rotate', 'note']);
-const PROP_KEYS = new Set(['name', 'shape', 'color', 'thickness', 'fill', 'from', 'to', 'r', 'x', 'y', 'rotate', 'scale', 'note']);
-const STATE_KEYS = new Set(['pose', 'x', 'y', 'facing', 'rotate', 'scale', 'ease', 'bezier']);
+const FIGURE_KEYS = new Set(['name', 'color', 'scale', 'x', 'y', 'facing', 'pose', 'rotate', 'reach', 'hands', 'z', 'group', 'note']);
+const PROP_KEYS = new Set(['name', 'shape', 'color', 'thickness', 'fill', 'from', 'to', 'r', 'x', 'y', 'rotate', 'scale', 'z', 'group', 'note']);
+const STATE_KEYS = new Set(['pose', 'x', 'y', 'facing', 'rotate', 'scale', 'reach', 'ease', 'bezier']);
 const CAMERA_KEYS = new Set(['x', 'y', 'zoom', 'rotate', 'ease', 'bezier']);
 const ENTRY_KEYS = new Set(['at', 'id', 'note', 'ease', 'camera']);
 const RESERVED_IDS = new Set([...ENTRY_KEYS, 'scene']);
@@ -221,7 +221,12 @@ class Context {
         if (!ID_PATTERN.test(id) || RESERVED_IDS.has(id)) { this.error(path, `"${id}" can't be used as a name: use letters, digits, "-" and "_", and not ${[...RESERVED_IDS].join(', ')}.`); continue; }
         if (entities.has(id)) { this.error(path, `"${id}" is already a figure or prop.`); continue; }
         if (!isRecord(spec)) { this.error(path, `"${id}" is an object.`); continue; }
-        entities.set(id, kind === 'figure' ? this.figure(id, spec, path, entities.size) : this.prop(id, spec, path));
+        const entity = kind === 'figure' ? this.figure(id, spec, path, entities.size) : this.prop(id, spec, path);
+        entity.order = entities.size;
+        entity.z = spec.z === undefined ? null : this.number(spec.z, `${path}/z`, {min: -1000, max: 1000, name: 'z'});
+        if (spec.group !== undefined && (typeof spec.group !== 'string' || !spec.group.trim())) this.error(`${path}/group`, '"group" is the name of a folder to put this layer in.');
+        entity.group = typeof spec.group === 'string' && spec.group.trim() ? spec.group.trim().slice(0, 80) : null;
+        entities.set(id, entity);
       }
     };
     add('figure', 'figures');
@@ -237,6 +242,8 @@ class Context {
       color: this.color(spec.color, `${path}/color`, this.color(PALETTE[order % PALETTE.length], path, [13, 153, 255])),
       keys: []};
     const state = {pose: BUILTIN_POSES.neutral, x: this.width / 2, y: null, facing: 'right', rotate: 0, scale: 1, ease: undefined};
+    if (spec.hands !== undefined && typeof spec.hands !== 'boolean') this.error(`${path}/hands`, '"hands" is true (fists at the wrists) or false.');
+    figure.hands = spec.hands === true;
     figure.initial = this.applyState(figure, state, spec, path, {initial: true});
     return figure;
   }
@@ -292,10 +299,33 @@ class Context {
         else next.facing = spec.facing;
       }
       if (spec.pose !== undefined) next.pose = this.pose(spec.pose, previous.pose, `${path}/pose`);
+      if (spec.reach !== undefined) next.pose = this.reach(entity, next, spec.reach, `${path}/reach`);
     }
     next.ease = spec.ease !== undefined || spec.bezier !== undefined ? this.ease(spec.ease ?? 'ease-in-out', spec.bezier, `${path}/${spec.ease !== undefined ? 'ease' : 'bezier'}`) : undefined;
     if (initial && next.y === null) next.y = entity.kind === 'figure' && this.ground !== null ? 'ground' : this.height * 0.52;
     return next;
+  }
+
+  /** Aims hands and feet at scene points; the solved angles become the key's pose, so later keys carry them. */
+  reach(entity, state, spec, path) {
+    if (!isRecord(spec)) { this.error(path, '"reach" maps handL, handR, footL or footR to a point [x, y] or {"x", "y", "bend"}.'); return state.pose; }
+    const y = state.y === 'ground' || state.y === null ? this.groundedY(entity, {...state, y: null}) : state.y;
+    let angles = nativeAngles(state.pose, state);
+    for (const [limb, value] of Object.entries(spec)) {
+      const at = `${path}/${escapeKey(limb)}`;
+      if (!LIMBS[limb]) { this.error(at, `Unknown limb "${limb}". Use ${Object.keys(LIMBS).join(', ')}.`); continue; }
+      const point = Array.isArray(value) ? {x: value[0], y: value[1]} : isRecord(value) ? value : null;
+      if (!point || !finite(point.x) || !finite(point.y)) { this.error(at, 'A reach target is [x, y] or {"x", "y", "bend"} in scene pixels.'); continue; }
+      if (point.bend !== undefined && !['up', 'down', 'left', 'right', 'forward', 'back'].includes(point.bend)) { this.error(`${at}/bend`, '"bend" is up, down, left, right, forward or back.'); continue; }
+      if (LIMBS[limb].kind === 'leg' && state.y === 'ground') this.warn(at, 'Feet that reach for a point and "y": "ground" disagree about where the feet are; give the figure a numeric y.');
+      const solved = solveReach(angles, {x: state.x, y, scale: state.scale, facing: state.facing}, limb, point, point.bend);
+      if (solved.short > 2) this.warn(at, `${entity.id}'s ${limb} falls ${Math.round(solved.short)} px short of [${point.x}, ${point.y}]; move the figure closer.`);
+      angles = solved.angles;
+    }
+    // Back to script terms: undo the facing mirror and the whole-figure rotation.
+    const pose = scriptPose(angles, {facing: state.facing});
+    for (const joint of JOINTS) pose[joint] -= state.rotate ?? 0;
+    return Object.freeze(pose);
   }
 
   groundedY(entity, state) {
@@ -361,16 +391,31 @@ class Context {
       figures: {}, poses: [...this.poses.keys()]};
 
     // Props that never move share one "Set" layer at the back; everything else gets its own layer.
+    // Back to front: the Set (props that never move and have no "z"), then by "z" (default 0), then script order.
     const moving = new Set(entries.flatMap(e => e.targets));
-    const ordered = [...entities.values()].sort((a, b) => (a.kind === 'prop' && !moving.has(a.id) ? 0 : 1) - (b.kind === 'prop' && !moving.has(b.id) ? 0 : 1));
+    const onSet = entity => entity.kind === 'prop' && !moving.has(entity.id) && entity.z === null;
+    const depth = entity => onSet(entity) ? -Infinity : entity.z ?? 0;
+    const sorted = [...entities.values()].sort((a, b) => depth(a) - depth(b) || a.order - b.order);
+    // A group's layers stay together (a folder is one block in the stack), where its first member falls.
+    const ordered = [], placed = new Set();
+    for (const entity of sorted) {
+      if (placed.has(entity)) continue;
+      const members = entity.group && !onSet(entity) ? sorted.filter(other => other.group === entity.group && !onSet(other)) : [entity];
+      for (const member of members) { placed.add(member); ordered.push(member); }
+    }
+    const folders = new Map();
     const initialObjects = [];
     let setLayer = null, figureCount = 0;
     for (const entity of ordered) {
       const typeId = report.figure_types.length + 1, objectUid = uid++;
       report.figure_types.push(entity.kind === 'figure' ? this.figureType(template, entity, typeId) : this.propType(entity, typeId));
-      const isStatic = entity.kind === 'prop' && !moving.has(entity.id);
+      const isStatic = onSet(entity);
       const layerId = isStatic ? (setLayer ??= addLayer('Set')) : addLayer(entity.name, entity.kind === 'figure' ? LAYER_COLOR_IDS[figureCount++ % LAYER_COLOR_IDS.length] : undefined);
       layers.assignments[String(objectUid)] = layerId;
+      if (entity.group && !isStatic) {
+        if (!folders.has(entity.group)) folders.set(entity.group, `folder-${folders.size + 1}`);
+        layers.byId[layerId].folderId = folders.get(entity.group);
+      }
       Object.assign(entity, {typeId, uid: objectUid, layerId, figureType: report.figure_types.at(-1)});
       // Each entity's own key list, carrying state forward from its initial spec.
       let state = entity.initial;
@@ -399,6 +444,7 @@ class Context {
     }
     if (!layers.order.length) addLayer('Layer 1');
     for (const id of layers.order) tracks[id] ??= {end: length, keys: [key(0, createFrame([], 1), {interpolation: 'constant'})]};
+    if (folders.size) layers.folders = {nextId: folders.size + 1, byId: Object.fromEntries([...folders].map(([name, id]) => [id, {name}]))};
     layers.defaultLayerId = layers.order[0];
     layers.activeId = layers.order.find(id => id !== setLayer) ?? layers.order[0];
 
@@ -424,6 +470,13 @@ class Context {
     type.figure_type_id = typeId;
     type.name = figure.name;
     for (const segment of type.segments) segment.color_rgb = [...figure.color];
+    // Fists: a filled disc continuing each forearm, keyed with the forearm's own angle so it turns with it.
+    if (figure.hands) for (const parent of [4, 6]) {
+      const forearm = type.segments[parent - 1], id = type.segments.length + 1;
+      type.segments.push({...structuredClone(forearm), segment_id: id, parent_id: parent, length: 15, thickness: 0, primitive_code: 3, flags: 3,
+        segment_type: 'circle', segment_kind: 'circleFill', z_order: id, name: parent === 4 ? 'Left fist' : 'Right fist'});
+    }
+    type.segment_count = type.segments.length;
     return type;
   }
 
@@ -448,7 +501,8 @@ class Context {
     const angles = nativeAngles(state.pose, state);
     const y = state.y === 'ground' ? this.ground - lowestOffset(angles, state.scale) : state.y;
     const object = structuredClone(template.object);
-    Object.assign(object, {unique_id: entity.uid, figure_type_id: entity.typeId, root_x: round(state.x), root_y: round(y), scale: state.scale, angles});
+    Object.assign(object, {unique_id: entity.uid, figure_type_id: entity.typeId, root_x: round(state.x), root_y: round(y), scale: state.scale,
+      angles: entity.hands ? [...angles, angles[3], angles[5]] : angles});
     // The hand/foot controllers keep scene-space targets: start them where the hands and feet are.
     const ends = forwardKinematics(angles, {x: object.root_x, y: object.root_y, scale: state.scale});
     for (const [id, control] of Object.entries(object._stykIK ?? {})) {

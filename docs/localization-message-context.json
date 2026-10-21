@@ -9791,19 +9791,19 @@
   },
   "dockHost.dragToMovePanelRightClickForLayout": {
     "locations": [
-      "src/shell/dock-host.mjs:458"
+      "src/shell/dock-host.mjs:459"
     ],
     "context": "localizedAttribute(tab, \"title\", \"dockHost.dragToMovePanelRightClickForLayout\", {});"
   },
   "dockHost.expandTimeline": {
     "locations": [
-      "src/shell/dock-host.mjs:536"
+      "src/shell/dock-host.mjs:537"
     ],
     "context": "localizedAttribute(expandButton, 'aria-label', (tall ? \"dockHost.restoreTimelineHeight\" : \"dockHost.expandTimeline\"), (tall ? {} : {}));"
   },
   "dockHost.folded": {
     "locations": [
-      "src/shell/dock-host.mjs:376"
+      "src/shell/dock-host.mjs:377"
     ],
     "context": "localizedAttribute(strip, 'aria-label', \"dockHost.folded\", {value: SIDE_NAMES[side]});"
   },
@@ -9821,75 +9821,75 @@
   },
   "dockHost.message8PresetsSavedDeleteOneFirst": {
     "locations": [
-      "src/shell/dock-host.mjs:1024"
+      "src/shell/dock-host.mjs:1025"
     ],
     "context": "if (result?.error) throw messageError(new Error(''), result.error === 'limit' ? \"dockHost.message8PresetsSavedDeleteOneFirst\""
   },
   "dockHost.nameThePresetFirst": {
     "locations": [
-      "src/shell/dock-host.mjs:1025",
-      "src/shell/dock-host.mjs:1039"
+      "src/shell/dock-host.mjs:1026",
+      "src/shell/dock-host.mjs:1040"
     ],
     "context": ": result.error === 'budget' ? \"dockHost.presetStorageIsFullDeleteOneFirst\" : \"dockHost.nameThePresetFirst\");"
   },
   "dockHost.presetStorageIsFullDeleteOneFirst": {
     "locations": [
-      "src/shell/dock-host.mjs:1025"
+      "src/shell/dock-host.mjs:1026"
     ],
     "context": ": result.error === 'budget' ? \"dockHost.presetStorageIsFullDeleteOneFirst\" : \"dockHost.nameThePresetFirst\");"
   },
   "dockHost.resizeFigureStructure": {
     "locations": [
-      "src/shell/dock-host.mjs:820"
+      "src/shell/dock-host.mjs:821"
     ],
     "context": "const labelKey = name === 'bottom' ? \"dockHost.resizeTimeline\" : panels.includes('structure') ? \"dockHost.resizeFigureStructure\""
   },
   "dockHost.resizePanels": {
     "locations": [
-      "src/shell/dock-host.mjs:821",
-      "src/shell/dock-host.mjs:822"
+      "src/shell/dock-host.mjs:822",
+      "src/shell/dock-host.mjs:823"
     ],
     "context": ": panels.includes('properties') ? \"dockHost.resizePropertiesPanel\" : 'dockHost.resizePanels';"
   },
   "dockHost.resizePropertiesPanel": {
     "locations": [
-      "src/shell/dock-host.mjs:821"
+      "src/shell/dock-host.mjs:822"
     ],
     "context": ": panels.includes('properties') ? \"dockHost.resizePropertiesPanel\" : 'dockHost.resizePanels';"
   },
   "dockHost.resizeStackedLeftPanels": {
     "locations": [
-      "src/shell/dock-host.mjs:814"
+      "src/shell/dock-host.mjs:815"
     ],
     "context": "localizedAttribute(el, 'aria-label', side === 'left' ? 'dockHost.resizeStackedLeftPanels' : 'dockHost.resizeStackedRightPanels', {});"
   },
   "dockHost.resizeStackedRightPanels": {
     "locations": [
-      "src/shell/dock-host.mjs:814"
+      "src/shell/dock-host.mjs:815"
     ],
     "context": "localizedAttribute(el, 'aria-label', side === 'left' ? 'dockHost.resizeStackedLeftPanels' : 'dockHost.resizeStackedRightPanels', {});"
   },
   "dockHost.resizeTimeline": {
     "locations": [
-      "src/shell/dock-host.mjs:820"
+      "src/shell/dock-host.mjs:821"
     ],
     "context": "const labelKey = name === 'bottom' ? \"dockHost.resizeTimeline\" : panels.includes('structure') ? \"dockHost.resizeFigureStructure\""
   },
   "dockHost.restoreTimelineHeight": {
     "locations": [
-      "src/shell/dock-host.mjs:536"
+      "src/shell/dock-host.mjs:537"
     ],
     "context": "localizedAttribute(expandButton, 'aria-label', (tall ? \"dockHost.restoreTimelineHeight\" : \"dockHost.expandTimeline\"), (tall ? {} : {}));"
   },
   "dockHost.sizePixels": {
     "locations": [
-      "src/shell/dock-host.mjs:810"
+      "src/shell/dock-host.mjs:811"
     ],
     "context": "localizedAttribute(el,'aria-valuetext','dockHost.sizePixels',{count:bounds.now});"
   },
   "dockHost.thisPresetNoLongerExists": {
     "locations": [
-      "src/shell/dock-host.mjs:1039"
+      "src/shell/dock-host.mjs:1040"
     ],
     "context": "if (result?.error) throw messageError(new Error(''), result.error === 'name' ? \"dockHost.nameThePresetFirst\" : \"dockHost.thisPresetNoLongerExists\");"
   },

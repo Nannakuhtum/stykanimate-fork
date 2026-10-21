@@ -108,3 +108,41 @@ export function lowestOffset(angles, scale = 1) {
 
 /** A fresh Blue figure definition and template object (independent copies). */
 export function blueTemplate() { return createBlueStartupPose(); }
+
+/** Two-bone chains a script can aim: the limb's two joints and where the chain starts. */
+export const LIMBS = Object.freeze({
+  handL: Object.freeze({bones: [2, 3], kind: 'arm'}), handR: Object.freeze({bones: [4, 5], kind: 'arm'}),
+  footL: Object.freeze({bones: [6, 7], kind: 'leg'}), footR: Object.freeze({bones: [8, 9], kind: 'leg'}),
+});
+const BEND_DIRECTIONS = {up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0]};
+
+/**
+ * Aims one limb's hand or foot at a scene point (two-bone IK) and returns new native angles.
+ * `bend` picks which side the elbow or knee goes: up, down, left, right, forward or back
+ * (forward/back follow `facing`). Default: elbows down, knees forward. A target out of reach
+ * straightens the limb toward it; `reached` reports how far short it fell (0 when it touches).
+ */
+export function solveReach(angles, {x, y, scale = 1, facing = 'right'}, limb, target, bend) {
+  const {bones: [first, second], kind} = LIMBS[limb];
+  const ends = forwardKinematics(angles, {x, y, scale});
+  const base = ends[first].start, l1 = SEGMENTS[first].length * scale, l2 = SEGMENTS[second].length * scale;
+  const dx = target.x - base.x, dy = target.y - base.y, full = Math.hypot(dx, dy);
+  const d = Math.min(Math.max(full, Math.abs(l1 - l2) + 1e-6), l1 + l2 - 1e-6);
+  const toward = Math.atan2(dy, dx), spread = Math.acos(Math.min(1, Math.max(-1, (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d))));
+  const side = bend ?? (kind === 'arm' ? 'down' : 'forward');
+  const forward = facing === 'left' ? -1 : 1;
+  const direction = side === 'forward' ? [forward, 0] : side === 'back' ? [-forward, 0] : BEND_DIRECTIONS[side];
+  let best = null;
+  for (const sign of [1, -1]) {
+    const a1 = toward + sign * spread, elbow = {x: base.x + Math.cos(a1) * l1, y: base.y + Math.sin(a1) * l1};
+    const reachEnd = {x: base.x + Math.cos(toward) * d, y: base.y + Math.sin(toward) * d};
+    const a2 = Math.atan2(reachEnd.y - elbow.y, reachEnd.x - elbow.x);
+    const score = (elbow.x - (base.x + reachEnd.x) / 2) * direction[0] + (elbow.y - (base.y + reachEnd.y) / 2) * direction[1];
+    if (!best || score > best.score) best = {score, a1, a2};
+  }
+  const next = [...angles];
+  next[first] = unwrapNear(best.a1, angles[first]);
+  next[second] = unwrapNear(best.a2, angles[second]);
+  return {angles: next, short: Math.max(0, full - (l1 + l2))};
+}
+const unwrapNear = (angle, near) => angle + Math.round((near - angle) / (2 * Math.PI)) * 2 * Math.PI;

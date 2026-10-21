@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {compileScript} from '../src/script/compile.mjs';
 import {parseJsonc} from '../src/script/jsonc.mjs';
-import {nativeAngles, scriptPose, BUILTIN_POSES, lowestOffset} from '../src/script/stick-rig.mjs';
+import {nativeAngles, scriptPose, BUILTIN_POSES, lowestOffset, forwardKinematics} from '../src/script/stick-rig.mjs';
 import {captureSuggestion} from '../src/script/capture.mjs';
 import {applyReviewOperation, emptyReview, reviewPathFor, formatNotes, parseReview, serializeReview} from '../src/script/review.mjs';
 import {previewSession, sampleFrame, rasterizeFrame, encodePNG} from '../src/script/preview.mjs';
@@ -128,4 +128,73 @@ test('the example film compiles cleanly and previews', () => {
   assert.ok(frame.items.length >= 21);
   const png = encodePNG(frame.width, frame.height, rasterizeFrame(frame, {background: result.index.background}));
   assert.deepEqual([...png.subarray(1, 4)], [80, 78, 71]);
+});
+
+test('reach aims hands and feet at scene points, facing either way, and two figures can share a grip', () => {
+  const grip = [480, 300];
+  const {report, index, ok, diagnostics} = compileScript({stykscript: 1,
+    figures: {a: {x: 400, y: 380, pose: 'sit', reach: {handR: grip}}, b: {x: 560, y: 380, pose: 'sit', facing: 'left', reach: {handR: grip}}},
+    timeline: [{at: 10, a: {reach: {handR: [470, 330], handL: {x: 440, y: 360, bend: 'up'}}}, b: {reach: {handR: [470, 330]}}}]});
+  assert.ok(ok, JSON.stringify(diagnostics));
+  const editor = load(report);
+  const hand = (frame, id, bone) => {
+    const object = frame.objects.find(o => o.unique_id === index.figures[id].uid);
+    const ends = forwardKinematics(object.angles, {x: object.root_x, y: object.root_y});
+    return ends[bone];
+  };
+  for (const [tick, point] of [[0, grip], [9, [470, 330]]]) {
+    const frame = editor.seek(tick);
+    for (const id of ['a', 'b']) {
+      const end = hand(frame, id, 5);
+      assert.ok(Math.hypot(end.x - point[0], end.y - point[1]) < 0.5, `${id} at ${tick}: ${end.x},${end.y}`);
+    }
+  }
+  const frame = editor.seek(9), elbow = hand(frame, 'a', 2), shoulder = elbow.start, left = hand(frame, 'a', 3);
+  assert.ok(Math.hypot(left.x - 440, left.y - 360) < 0.5);
+  assert.ok(elbow.y < (shoulder.y + 360) / 2 - 5, 'bend: up puts the elbow above the shoulder-hand line');
+  const far = compileScript({stykscript: 1, figures: {a: {x: 100, y: 300, reach: {handR: [600, 300]}}}});
+  assert.match(far.diagnostics.map(d => d.message).join(), /falls \d+ px short/);
+});
+
+test('"z" orders layers back to front, "group" makes a folder, and props with "z" leave the Set', () => {
+  const {report, index, ok, diagnostics} = compileScript({stykscript: 1,
+    figures: {front: {z: 2}, back: {z: -1, group: 'Crowd'}, back2: {z: -1, group: 'Crowd'}, middle: {}},
+    props: {floor: {shape: 'line'}, table: {shape: 'line', z: 1}}});
+  assert.ok(ok, JSON.stringify(diagnostics));
+  const layers = report._styk.layers, names = layers.order.map(id => layers.byId[id].name);
+  assert.deepEqual(names, ['Set', 'back', 'back2', 'middle', 'table', 'front']);
+  const folder = layers.byId[index.figures.back.layerId].folderId;
+  assert.equal(layers.folders.byId[folder].name, 'Crowd');
+  assert.equal(layers.byId[index.figures.back2.layerId].folderId, folder);
+  assert.equal(layers.byId[index.figures.middle.layerId].folderId, undefined);
+  load(report);   // the folder metadata validates in the app
+});
+
+test('"hands" adds fists that stay on the wrists while the arms move', () => {
+  const {report, index} = compileScript({stykscript: 1, figures: {a: {x: 300, y: 300, hands: true, pose: 'cheer'}}, timeline: [{at: 9, a: {pose: 'punch'}}]});
+  const type = report.figure_types.find(t => t.figure_type_id === index.figures.a.uid);
+  assert.deepEqual(type.segments.slice(10).map(s => [s.parent_id, s.segment_kind]), [[4, 'circleFill'], [6, 'circleFill']]);
+  const editor = load(report);
+  for (const tick of [0, 4, 8]) {
+    const object = editor.seek(tick).objects[0], ends = forwardKinematics(object.angles, {x: object.root_x, y: object.root_y});
+    assert.ok(Math.abs(object.angles[10] - object.angles[3]) < 1e-9 && Math.abs(object.angles[11] - object.angles[5]) < 1e-9, `fists follow the forearms at ${tick}`);
+    assert.ok(ends[3] && ends[5]);
+  }
+});
+
+test('the arm-wrestling example keeps both fists on one grip until the slam and finishes cleanly', () => {
+  const result = compileScript(readFileSync(new URL('../examples/scripts/arm-wrestle.stykscript.json', import.meta.url), 'utf8'));
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.diagnostics, []);
+  const editor = load(result.report), {blue, red} = result.index.figures;
+  const hand = (frame, figure) => {
+    const object = frame.objects.find(o => o.unique_id === figure.uid);
+    return forwardKinematics(object.angles, {x: object.root_x, y: object.root_y, scale: object.scale})[5];
+  };
+  for (let tick = 0; tick <= 135; tick++) {
+    const frame = editor.seek(tick), b = hand(frame, blue), r = hand(frame, red);
+    assert.ok(Math.hypot(b.x - r.x, b.y - r.y) < 2.5, `grip at frame ${tick + 1}: ${Math.hypot(b.x - r.x, b.y - r.y).toFixed(1)} px apart`);
+  }
+  const pin = hand(editor.seek(132), blue);
+  assert.ok(pin.x > 520 && pin.y > 315, 'at the slam the hands are down on Red’s side');
 });

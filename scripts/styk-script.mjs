@@ -9,7 +9,9 @@
  *   preview <script> [options]     Contact sheet PNG of key frames (default <script>.preview.png).
  *       --frames 1,12,30   --width 320   --columns 4   --svg   --out <file>
  *   frame <script> <n> [--width 960] [--out <file>]   One frame as a PNG.
- *   video <script> [--out film.mp4|film.gif] [--width 640]   Whole film (needs ffmpeg on PATH).
+ *   video <script> [--out film.mp4|film.gif] [--width 640]   Quick whole-film preview (needs ffmpeg on PATH).
+ *   render <script> [--out film.mp4] [--size 1080|720|original] [--stills 1,60]
+ *                                  The film through the desktop app's own renderer and MP4 export.
  *   compile <script> [--out <file>]  Write the StykAnimate document (.json; opens with File → Open).
  *   rig                            Joint names, bone lengths and the built-in poses.
  *   notes <script> [--all] [--json]  The person's review notes (open ones by default).
@@ -117,6 +119,12 @@ const commands = {
     console.log(`Wrote ${out} (${index.length} frames, ${width}×${height}).`);
   },
 
+  async render() {
+    const child = spawn(process.execPath, [path.join(ROOT, 'scripts', 'render-script.mjs'), ...process.argv.slice(3)], {stdio: 'inherit'});
+    const code = await new Promise(resolve => child.on('close', resolve));
+    if (code) fail('Rendering failed. On Linux without a display, run it under xvfb-run -a.');
+  },
+
   async compile([file]) {
     const {report} = await load(file);
     const out = output(file, '.styk.json');
@@ -184,7 +192,7 @@ const STARTER = `// StykScript: see docs/AGENT-SCRIPTING.md. Frames start at 1; 
 `;
 
 if (!commands[command]) {
-  console.log((await readFile(fileURLToPath(import.meta.url), 'utf8')).split('\n').slice(1, 18).map(l => l.replace(/^ ?\*\/?\s?|^\/\*\*\s?/, '')).join('\n'));
+  console.log((await readFile(fileURLToPath(import.meta.url), 'utf8')).split('\n').slice(1, 20).map(l => l.replace(/^ ?\*\/?\s?|^\/\*\*\s?/, '')).join('\n'));
   process.exit(command ? 1 : 0);
 }
 await commands[command](args);

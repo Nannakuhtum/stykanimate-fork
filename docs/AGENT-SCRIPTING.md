@@ -18,6 +18,8 @@ with notes the agent reads back from a file next to the script.
 2. `npm run script -- check film.stykscript.json` lists errors and warnings by line.
 3. `npm run script -- preview film.stykscript.json` writes a contact sheet PNG of the key frames,
    drawn by the app's own evaluator, so the agent can look at its work without the app.
+   `npm run script -- render film.stykscript.json` exports the finished film through the desktop
+   app's own renderer and MP4 export (1080p by default), with optional stills.
 4. `npm run script -- open film.stykscript.json` starts the desktop app with the script
    (or the person uses **Script › Open script…**). The script plays as a project; every time the
    file is saved, the project reloads in place at the same frame.
@@ -90,6 +92,9 @@ The torso and both thighs start at the hip; the head and both arms start at the 
 `L`/`R` are the figure's own sides (Blue's segments are named *Left upper arm* and so on in the
 app). The app's segment names are accepted too.
 
+`"hands": true` on a figure adds fists: a disc at the end of each forearm that turns with it. They
+make contact (a handshake, a grip, a punch landing) much easier to read.
+
 Poses are written **facing right** (toward +x). `"facing": "left"` mirrors the figure, so the same
 pose works for both sides of a fight. `"rotate"` turns the whole figure about the hip, in degrees.
 
@@ -105,24 +110,38 @@ of the figures and props by name, plus optionally the `camera`:
 | --- | --- |
 | `pose` | a pose name, or an object of joints. An object without `base` changes only the joints it names. |
 | `x`, `y` | a number, or `"+n"`/`"-n"` from the figure's previous key. `"y": "ground"` stands the figure's lowest point on `ground`. |
+| `reach` | aim hands and feet at scene points: `{"handR": [x, y], "footL": {"x": 430, "y": 491, "bend": "forward"}}`. Limbs: `handL`, `handR`, `footL`, `footR`. `bend` picks where the elbow or knee goes: `up`, `down` (arms' default), `left`, `right`, `forward` (legs' default) or `back`. Applied after `pose`, so the rest of the pose stays. Out of reach, the limb straightens toward the point and the checker says how far short it is. |
 | `facing` | `"left"` or `"right"` |
 | `rotate`, `scale` | whole-figure rotation in degrees (also `"+n"`), and size |
 | `ease` | how this key moves to the next: `smooth` (default), `linear`, `ease-in`, `ease-out`, `ease-in-out`, `hold`; or `"bezier": [x1, y1, x2, y2]` |
 | `camera` | `x`, `y` (the scene point to centre), `zoom`, `rotate`, `ease` |
 | `id`, `note` | names the entry for notes and the panel, and says what it is for |
 
-Anything not given carries over from the figure's previous key. A figure only gets a key at the
+Anything not given carries over from the figure's previous key. A `reach` is solved into the key's
+joint angles, so later keys carry the arm or leg where it was put unless they reach again. A figure only gets a key at the
 entries that name it, so its motion is smooth across entries that move other figures. An `ease`
 on the entry itself applies to everything in it that has no `ease` of its own.
+
+Two figures that hold each other (a grip, a carry) each interpolate their own joints between
+keys, so their hands drift apart during a fast, wide move. Key such moves on every frame or two;
+`examples/scripts/arm-wrestle.gen.mjs` keys its rollover on every frame for this reason, and its
+test checks the fists stay within 2.5 px of each other until the release.
 
 Joints always turn the **short way round** between keys. Spins and flips need keys less than 180°
 apart; the checker warns when a key would turn a joint almost exactly half a circle (the direction
 is then a coin toss) or rotate a figure more than 180°.
 
+### Depth and folders
+
+| key (on a figure or prop) | meaning |
+| --- | --- |
+| `z` | stacking: lower is further back (default 0); ties keep script order. A prop with a `z` gets its own layer instead of joining the Set, so it can sit between figures (a table in front of a referee and behind the wrestlers' arms). |
+| `group` | a layer folder name; figures and props with the same group sit together in that folder (a crowd, confetti). |
+
 ### What it becomes
 
-Each figure and each moving prop gets its own layer, named after it; props that never move share a
-**Set** layer at the back. Each script entry becomes a key on that layer with the entry's easing,
+Each figure and each moving prop gets its own layer, named after it; props that never move and
+have no `z` share a **Set** layer at the back. Each script entry becomes a key on that layer with the entry's easing,
 and camera entries become Camera keys, so the timeline shows the script's structure and everything
 remains editable. Saving the project writes an ordinary `.styk` file; the script itself is not
 changed by the app.
@@ -154,7 +173,9 @@ npm run script -- new <file>                    starter script
 npm run script -- check <script>                errors/warnings with lines; exit 1 on errors
 npm run script -- preview <script> [--frames 1,12,30] [--width 320] [--columns 4] [--svg] [--out f]
 npm run script -- frame <script> <n> [--width 960] [--out f]
-npm run script -- video <script> [--out film.mp4|film.gif] [--width 640]     (needs ffmpeg)
+npm run script -- video <script> [--out film.mp4|film.gif] [--width 640]     quick preview (needs ffmpeg)
+npm run script -- render <script> [--out film.mp4] [--size 1080|720|original] [--stills 1,60]
+                                                the app's renderer and MP4 export (xvfb-run -a on a headless Linux)
 npm run script -- compile <script> [--out f]   the project as .styk.json (File › Open opens it)
 npm run script -- rig                           joints, lengths, built-in poses
 npm run script -- notes <script> [--all] [--json]
@@ -177,7 +198,8 @@ Previews draw lines and circles only; they use the same poses, easing and camera
 | Headless previews | `src/script/preview.mjs` |
 | The panel | `src/script/script-panel.mjs`, `src/styles/features/script.css` |
 | Watching files, review writes | `desktop/script-session.cjs` (`styk:script-*` IPC) |
-| Command line | `scripts/styk-script.mjs` |
+| Command line | `scripts/styk-script.mjs`; `scripts/render-script.mjs` drives the app for `render` |
+| Examples | `examples/scripts/duel.stykscript.json` (hand-written), `examples/scripts/arm-wrestle.gen.mjs` (generates `arm-wrestle.stykscript.json`) |
 
 The compiler is pure: no DOM, workers or files. The panel replaces the script's project with
 `editor.load()` (history starts over; the script is the source of truth), and only when the
@@ -198,6 +220,8 @@ version; screenshots go to `artifacts/script-smoke/`.
 
 - One rig (Blue) and two prop shapes. Other figures, sprites, text, effects and sound are not
   scriptable yet; they can be added in the app after compiling.
-- Layer order follows the script (Set, then figures and moving props in order).
+- A prop can't be hidden; keep it outside the shot until it is needed (the confetti waits above the frame).
+- The side view is flat: things that happen toward or away from the camera, like the real direction
+  of an arm-wrestling pin, have to be staged left/right.
 - In the browser build the panel reads a picked file (polled for changes where the browser allows)
   and keeps notes in the window; **Copy notes** hands them to the agent.
