@@ -1,0 +1,89 @@
+/* Script panel (src/script/script-panel.mjs, docs/AGENT-SCRIPTING.md). Kit
+ * classes (.ui-button, .ui-segmented, .ui-field, .ui-empty) draw the controls;
+ * this sheet lays them out and draws what is the panel's own:
+ *
+ *   the head      the script's file name with Live, its summary (or the
+ *                 problem line in red) and Open script…
+ *   the banner    a reload waiting for the person
+ *   problems      line-numbered errors and warnings, each a link to the line
+ *   Keys          rows of frame · id · who moves · note; the row under the
+ *                 playhead has a Styk blue bar
+ *   Script        monospace source with a gutter; current lines tinted blue,
+ *                 lines with problems tinted red or gold
+ *   Notes         the composer, then notes with their replies */
+@layer features {
+  :where(#script-panel) {
+    display: flex; flex-direction: column; flex: 1; min-block-size: 0; gap: var(--space-2);
+    padding: var(--space-3) var(--island-pad) var(--space-2);
+    font: var(--type-ui); color: var(--text-1); background: var(--surface);
+  }
+  :where(#script-panel)[hidden] { display: none; }
+  .script-panel > [hidden], .script-panel [data-pane][hidden] { display: none; }
+
+  .script-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-1) var(--space-2); }
+  .script-title { display: flex; align-items: center; gap: var(--space-1-5); min-inline-size: 0; font: var(--type-ui-strong); }
+  .script-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .script-live { flex: none; padding: 0 var(--space-1-5); border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--accent-text); font: var(--type-small-strong); }
+  .script-live::before { content: ""; display: inline-block; inline-size: 6px; block-size: 6px; margin-inline-end: var(--space-1); border-radius: 50%; background: currentColor; vertical-align: 1px; }
+  .script-summary { grid-column: 1; margin: 0; font: var(--type-small); color: var(--text-2); }
+  .script-summary[data-tone="danger"] { color: var(--danger-text); }
+  .script-head > .ui-button { grid-row: 1 / span 2; grid-column: 2; }
+
+  .script-banner { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-2-5); border-radius: var(--radius-md); background: var(--accent-soft); font: var(--type-small); }
+  .script-banner-text { flex: 1; }
+
+  .script-problems { flex: none; margin: 0; padding: 0; list-style: none; max-block-size: 30%; overflow: hidden auto; border-radius: var(--radius-md); background: var(--surface-sunken); }
+  .script-problems button { display: block; inline-size: 100%; padding: var(--space-1-5) var(--space-2); border: 0; background: none; color: inherit; font: var(--type-small); text-align: start; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
+  .script-problems button:hover { background: var(--surface-hover); }
+  .script-problems li + li { border-block-start: 1px solid var(--line-1); }
+  .script-problem-line { font-variant-numeric: tabular-nums; font-weight: 650; }
+  .script-problems [data-level="error"] .script-problem-line { color: var(--danger-text); }
+  .script-problems [data-level="warning"] .script-problem-line { color: var(--gold-800); }
+
+  .script-tabs { justify-self: stretch; inline-size: 100%; }
+  .script-body { flex: 1; min-block-size: 0; overflow: auto; margin-inline: calc(-1 * var(--space-1)); padding-inline: var(--space-1); }
+
+  .script-keys { margin: 0; padding: 0; list-style: none; }
+  .script-keys button {
+    display: grid; grid-template-columns: 3.2em minmax(0, auto) minmax(0, 1fr); align-items: baseline; gap: 0 var(--space-2);
+    inline-size: 100%; padding: var(--space-1-5) var(--space-2); border: 0; border-radius: var(--radius-sm);
+    background: none; color: inherit; font: var(--type-small); text-align: start; cursor: pointer;
+  }
+  .script-keys button:hover { background: var(--surface-hover); }
+  .script-keys button[data-current] { background: var(--surface-selected); box-shadow: inset 3px 0 0 var(--accent); }
+  .script-key-frame { color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .script-key-id { font-weight: 650; }
+  .script-key-who { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .script-key-note { grid-column: 2 / -1; color: var(--text-2); }
+
+  .script-source { margin: 0; font: 12px/1.55 var(--font-mono); color: var(--text-1); white-space: pre; tab-size: 2; }
+  .script-line { display: block; padding-inline-end: var(--space-2); cursor: pointer; }
+  .script-line:hover { background: var(--surface-hover); }
+  .script-line[data-current] { background: var(--accent-soft); }
+  .script-line[data-level="error"] { background: var(--danger-soft); }
+  .script-line[data-level="warning"] { background: var(--gold-50); }
+  .script-gutter { display: inline-block; inline-size: 3.2em; margin-inline-end: var(--space-2); padding-inline-end: var(--space-1); color: var(--text-3); text-align: end; user-select: none; }
+
+  .script-notes { display: grid; align-content: start; gap: var(--space-2); }
+  .script-composer { display: grid; gap: var(--space-1-5); padding: var(--space-2); border-radius: var(--radius-md); background: var(--surface-sunken); }
+  .script-composer-where { margin: 0; font: var(--type-small-strong); color: var(--text-2); }
+  .script-note-text { inline-size: 100%; min-block-size: 64px; resize: vertical; padding: var(--space-1-5) var(--space-2); font: var(--type-ui); box-sizing: border-box; }
+  .script-attach, .script-show-resolved { display: flex; align-items: center; gap: var(--space-1-5); font: var(--type-small); color: var(--text-2); }
+  .script-attach:has(input:disabled) { color: var(--text-3); }
+  .script-composer-actions { display: flex; justify-content: flex-end; }
+  .script-copy-notes { justify-self: start; }
+  .script-note-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+  .script-note-empty { padding: var(--space-2); font: var(--type-small); color: var(--text-3); }
+  .script-note { display: grid; gap: var(--space-1); padding: var(--space-2) var(--space-2-5); border: 1px solid var(--line-1); border-radius: var(--radius-md); }
+  .script-note[data-status="resolved"] { opacity: .7; }
+  .script-note-head { display: flex; justify-content: space-between; gap: var(--space-2); font: var(--type-small); color: var(--text-2); }
+  .script-note-status { font-weight: 650; }
+  .script-note[data-status="open"] .script-note-status { color: var(--accent-text); }
+  .script-note p { margin: 0; overflow-wrap: anywhere; }
+  .script-reply { padding-inline-start: var(--space-2); border-inline-start: 2px solid var(--line-2); font: var(--type-small); }
+  .script-reply[data-from="agent"] { border-color: var(--accent); }
+  .script-suggestion summary { font: var(--type-small); color: var(--text-2); cursor: pointer; }
+  .script-suggestion pre { margin: var(--space-1) 0 0; padding: var(--space-1-5); max-block-size: 160px; overflow: auto; border-radius: var(--radius-sm); background: var(--surface-sunken); font: 11px/1.45 var(--font-mono); white-space: pre-wrap; }
+  .script-note-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-inline-start: calc(-1 * var(--space-2)); }
+  .script-empty { margin-block: auto; }
+}

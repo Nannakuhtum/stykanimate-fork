@@ -121,6 +121,13 @@ contextBridge.exposeInMainWorld('stykDesktop', Object.freeze({
   openPublicLibraryPage: id => ipcRenderer.invoke('styk:public-library-page', id),
   takePublicLibraryLink: () => ipcRenderer.invoke('styk:public-library-link'),
   onPublicLibraryLink: callback => subscribe('styk:public-library-link', callback),
+  // StykScript (docs/AGENT-SCRIPTING.md): scripts are opaque ids for files the person picked or the launch named.
+  takeLaunchScript: () => ipcRenderer.invoke('styk:script-launch'),
+  openScript: () => ipcRenderer.invoke('styk:script-open'),
+  readScript: id => ipcRenderer.invoke('styk:script-read', id),
+  reviewScript: (id, operation) => ipcRenderer.invoke('styk:script-review', id, operation),
+  closeScript: id => ipcRenderer.invoke('styk:script-close', id),
+  onScriptChanged: callback => subscribe('styk:script-changed', callback),
   getWorkspacePreferences: () => ipcRenderer.invoke('styk:workspace-preferences-get'),
   setWorkspacePreferences: (preferences) => ipcRenderer.invoke('styk:workspace-preferences-set', preferences),
   getEditorSettings: () => ipcRenderer.invoke('styk:editor-settings-get'),

@@ -24,6 +24,7 @@
 - **Particle effects** (explosions, auras, beams, smoke) and brushes for drawing.
 - **Community library:** insert figures and movieclips shared by other animators.
 - **Export** MP4, WebM (with transparency), GIF, APNG, PNG/JPEG/SVG frames, and editable `.piv`/`.stk`.
+- **Scriptable by agents:** describe an animation in a StykScript file, preview it from the command line, and review it in the app's Script panel with notes that go back to the agent ([docs/AGENT-SCRIPTING.md](docs/AGENT-SCRIPTING.md)).
 - **27 interface languages**, light and dark themes, a touch interface for phones and tablets.
 
 Everything (decoding, editing, saving and rendering) runs locally. Optional, consent-based diagnostics are described in [docs/telemetry.md](docs/telemetry.md).

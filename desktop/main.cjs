@@ -33,6 +33,7 @@ const getReleaseHistory = require('./release-history.cjs').createReleaseHistory(
 let telemetryBuild = {};
 try { telemetryBuild = require('./telemetry-build.json'); } catch { /* Unpackaged/older source has unknown build metadata. */ }
 const { RELEASES_URL, DONATE_URL } = require('./release-links.cjs');
+const { ScriptSessions } = require('./script-session.cjs');
 
 // On Wayland the window cannot show WebGPU content, and Chromium picks its display
 // backend before this file runs, so start again under XWayland (gpu-switches.cjs).
@@ -88,7 +89,12 @@ const projectFiles = new ProjectFiles();
 // any open project has unsaved changes, `unsaved` counts them and `unsavedName` names one of them.
 let documentState = { name: 'Untitled', dirty: false, unsaved: 0, unsavedName: '' };
 let quitting = false;
-let pendingFiles = process.argv.slice(app.isPackaged ? 1 : 2).filter((arg) => /\.(piv|stk|styk|stkz|stykmov|json|nodes|nodemc|stknds|zip)$/i.test(arg));
+// A script (docs/AGENT-SCRIPTING.md) named at launch, as --script=<path> or a *.stykscript(.json) argument, opens
+// in the Script panel instead of as a project; the window takes it once it is ready.
+const launchArguments = process.argv.slice(app.isPackaged ? 1 : 2);
+let launchScript = launchArguments.find(arg => arg.startsWith('--script='))?.slice('--script='.length)
+  || launchArguments.find(arg => ScriptSessions.isScriptFile(arg)) || null;
+let pendingFiles = launchArguments.filter((arg) => /\.(piv|stk|styk|stkz|stykmov|json|nodes|nodemc|stknds|zip)$/i.test(arg) && !ScriptSessions.isScriptFile(arg));
 
 // Windows and macOS use Chromium's normal driver allowlist. Linux needs the
 // Vulkan WebGPU opt-in to reach the GPU; see gpu-switches.cjs.
@@ -471,6 +477,24 @@ function registerIpc() {
     trusted(event); const bytes = await fonts.readFont(id);
     return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   });
+  // Scripts and their review notes (script-session.cjs): the renderer holds ids, never paths.
+  const scripts = new ScriptSessions({ appRoot: APP_ROOT, send: value => { if (window && !window.isDestroyed()) window.webContents.send('styk:script-changed', value); } });
+  app.on('will-quit', () => scripts.dispose());
+  handle('styk:script-launch', async event => {
+    trusted(event);
+    if (!launchScript) return null;
+    const file = launchScript; launchScript = null;
+    return scripts.open(file);
+  });
+  handle('styk:script-open', async event => {
+    trusted(event);
+    const result = await dialog.showOpenDialog(window, { title: t('script.openDialogTitle'), properties: ['openFile'],
+      filters: [{ name: t('script.fileType'), extensions: ['json', 'stykscript'] }] });
+    return result.canceled || !result.filePaths[0] ? null : scripts.open(result.filePaths[0]);
+  });
+  handle('styk:script-read', (event, id) => { trusted(event); return scripts.read(String(id)); });
+  handle('styk:script-review', (event, id, operation) => { trusted(event); return scripts.applyReview(String(id), operation); });
+  handle('styk:script-close', (event, id) => { trusted(event); return scripts.close(String(id)); });
   handle('styk:workspace-preferences-get', (event) => { trusted(event); return preferences.get(); });
   handle('styk:workspace-preferences-set', (event, value) => { trusted(event); return preferences.set(value); });
   handle('styk:editor-settings-get', (event) => { trusted(event); return editorSettings.get(); });

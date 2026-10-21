@@ -100,6 +100,12 @@ export const PANEL_CATALOG = Object.freeze([
     docks: ['bottom'], floatable: false, min: 168, maxFraction: 0.6, canHide: ['rig'], hiddenFallback: 'strip'},
 ].map(descriptor => freezeDescriptor(normalizePanelDescriptor(descriptor))));
 
+/** The Script panel (src/script/script-panel.mjs, docs/AGENT-SCRIPTING.md). The app adds it to the
+ * catalogue it gives the shell; no preset records it, so it arrives as a tab on the right without
+ * changing anyone's arrangement (`defaultDock`). */
+export const SCRIPT_PANEL = freezeDescriptor(normalizePanelDescriptor({id: 'script', title: 'Script', titleKey: 'shell.panel.script', icon: 'code',
+  docks: ['right', 'left'], floatable: true, min: 256, pref: 340, max: 560, modes: ['animate'], defaultDock: 'right'}));
+
 /** True when the panel exists in the workspace ('build' or 'rig' for Build). */
 export const panelInMode = (descriptor, mode) => !descriptor.modes || descriptor.modes.includes(workspaceId(mode));
 

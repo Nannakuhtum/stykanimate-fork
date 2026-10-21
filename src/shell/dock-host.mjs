@@ -50,7 +50,7 @@ import {MENUBAR_FOLD, watchBand} from './topbar.mjs';
 import {COLLECTIONS} from './dock-keyboard.mjs';
 
 const SIDES = Object.freeze(['left', 'right']);
-const DEFAULT_ROOTS = Object.freeze({properties: '#properties-panel', vfx: '#vfx-panel', library: '#user-library',
+const DEFAULT_ROOTS = Object.freeze({properties: '#properties-panel', vfx: '#vfx-panel', library: '#user-library', script: '#script-panel',
   structure: '#builder-outliner', timeline: '#animation-timeline'});
 const SIDE_NAMES = Object.freeze({left: interfaceText("dockHost.leftPanels"), right: interfaceText("dockHost.inspector")});
 const STEP = 12, BIG_STEP = 40;
@@ -165,14 +165,15 @@ export function createDockHost({document: doc = globalThis.document, window: win
       // The touch band always has its menubar folded into the mark: its fold steps are the folded pass's.
       const widths = bandWatch?.forWidth(0);
       const bandMin = widths?.minimal ? {...widths.minimal, minimal: widths.minimal} : 0;
-      return {width: workspace.offsetWidth, height: workspace.offsetHeight, mode: mode(), platform, footer: 0,
+      return {width: workspace.offsetWidth, height: workspace.offsetHeight, mode: mode(), platform, footer: 0, panels: registry.constraints(),
         bandMin, metrics, measured: {band: 0, stageHead: head}, railColumns, touch: touching};
     }
     // The window, the band above the workspace and (until M3b) the status bar below it.
     // The band's and the stage header's measured heights (the height tier's values unless the UI scale changed them).
     const chrome = band?.offsetHeight || undefined;
     const below = footer && !footer.hidden ? footer.offsetHeight : 0;
-    return {width: app.clientWidth, height: app.clientHeight, mode: mode(), platform, footer: below,
+    // The registry's catalogue, so a panel the app adds (installShell's `catalog`) is solved too.
+    return {width: app.clientWidth, height: app.clientHeight, mode: mode(), platform, footer: below, panels: registry.constraints(),
       bandMin: bandWatch?.forWidth(app.clientWidth) ?? 0, metrics, measured: {band: chrome, stageHead: head}, railColumns};
   }
 
@@ -785,7 +786,7 @@ export function createDockHost({document: doc = globalThis.document, window: win
   const keyOf = name => (name === 'bottom' ? 'bottom' : solution?.regions[name]?.sizeKey ?? name);
   const sizeOf = name => solution?.aria[name]?.now ?? 0;
   function resizedLayout(layout, name, size, key = keyOf(name)) {
-    if (!name.endsWith('-islands')) return setSharedSize(layout, key, size);
+    if (!name.endsWith('-islands')) return setSharedSize(layout, key, size, {catalog: registry.constraints()});
     const side = name.split('-')[0], groups = solution?.regions[side]?.groups;
     if (groups?.length !== 2) return layout;
     const total = groups.reduce((sum, group) => sum + group.rect.height, 0);
@@ -841,7 +842,7 @@ export function createDockHost({document: doc = globalThis.document, window: win
   }
   const presentation = id => solution?.panels[id]?.presentation ?? 'unavailable';
   const sideOf = id => solution?.panels[id]?.side;
-  const place = (id, target, options = {}) => arrange((arrangement, m) => movePanel(arrangement, id, target, {mode: m, ...options}));
+  const place = (id, target, options = {}) => arrange((arrangement, m) => movePanel(arrangement, id, target, {mode: m, catalog: registry.constraints(), ...options}));
 
   /** Shows a panel: its tab in a docked island, its floating island, or a sheet; `focus` moves focus to it. */
   function showPanel(id, {focus = true, invoker} = {}) {
@@ -854,7 +855,7 @@ export function createDockHost({document: doc = globalThis.document, window: win
       if (focus) focusPanel(id);
       return true;
     }
-    if (current === 'docked') arrange((arrangement, m) => activatePanel(arrangement, id, {mode: m}));
+    if (current === 'docked') arrange((arrangement, m) => activatePanel(arrangement, id, {mode: m, catalog: registry.constraints()}));
     else if (current === 'hidden') place(id, 'docked');
     else if (current === 'strip' || current === 'sheet') {
       openSheet(sideOf(id), id, {invoker, focus});
@@ -937,7 +938,7 @@ export function createDockHost({document: doc = globalThis.document, window: win
     if (!tall) beforeTall = store.layout.shared.sizes.bottom ?? null;
     const next = tall ? beforeTall : tallSize();
     if (tall) beforeTall = null;
-    store.update(layout => setSharedSize(layout, 'bottom', next));
+    store.update(layout => setSharedSize(layout, 'bottom', next, {catalog: registry.constraints()}));
     commit();
     return !tall;
   }
@@ -972,7 +973,7 @@ export function createDockHost({document: doc = globalThis.document, window: win
       onBeforeChange?.();
       for (const side of SIDES) closeSheet(side, {restoreFocus: false, recommit: false});
       closeBody({restoreFocus: false, recommit: false});
-      store.update(layout => resetLayout(layout));
+      store.update(layout => resetLayout(layout, {catalog: registry.constraints()}));
       commit();
     },
     resize: () => commit(),
@@ -980,7 +981,7 @@ export function createDockHost({document: doc = globalThis.document, window: win
     setPreset(id) {
       onBeforeChange?.();
       const m = mode();
-      store.update(layout => applyPreset(layout, m, id, {workspaceHeight: workspace.clientHeight}));
+      store.update(layout => applyPreset(layout, m, id, {workspaceHeight: workspace.clientHeight, catalog: registry.constraints()}));
       commit();
     },
     togglePanel,
@@ -1004,20 +1005,20 @@ export function createDockHost({document: doc = globalThis.document, window: win
     focus(on) {
       onBeforeChange?.();
       const m = mode();
-      store.update(layout => toggleFocus(layout, m, {on}));
+      store.update(layout => toggleFocus(layout, m, {on, catalog: registry.constraints()}));
       commit();
     },
     resetWorkspace() {
       onBeforeChange?.();
       const m = mode();
-      store.update(layout => resetMode(layout, m));
+      store.update(layout => resetMode(layout, m, {catalog: registry.constraints()}));
       commit();
     },
     saveLayout(name) {
       const m = mode();
       let result;
       store.update(layout => {
-        result = savePreset(layout, {name, mode: m});
+        result = savePreset(layout, {name, mode: m, catalog: registry.constraints()});
         return result.layout;
       });
       commit();
@@ -1026,13 +1027,13 @@ export function createDockHost({document: doc = globalThis.document, window: win
       return result.id;
     },
     deleteLayout(id) {
-      store.update(layout => deletePreset(layout, id));
+      store.update(layout => deletePreset(layout, id, {catalog: registry.constraints()}));
       commit();
     },
     renameLayout(id, name) {
       let result;
       store.update(layout => {
-        result = renamePreset(layout, id, name);
+        result = renamePreset(layout, id, name, {catalog: registry.constraints()});
         return result.layout;
       });
       commit();
@@ -1040,11 +1041,11 @@ export function createDockHost({document: doc = globalThis.document, window: win
     },
     /** Replaces a saved preset with its workspace's current arrangement. */
     updateLayout(id) {
-      store.update(layout => updatePreset(layout, id).layout);
+      store.update(layout => updatePreset(layout, id, {catalog: registry.constraints()}).layout);
       commit();
     },
     /** Whether the workspace can be saved as a new preset: {ok} or {ok: false, reason: 'limit' | 'budget'}. */
-    canSaveLayout: () => canSavePreset(store.layout, mode()),
+    canSaveLayout: () => canSavePreset(store.layout, mode(), {catalog: registry.constraints()}),
     /** The tools' rail on the stage's `left` or `right`. */
     setRail(side) {
       if (side !== 'left' && side !== 'right') return false;
@@ -1077,7 +1078,7 @@ export function createDockHost({document: doc = globalThis.document, window: win
     // Entering Draw or Build shows Properties; Animate keeps its own last tab.
     const record = store.layout.modes[next]?.panels.find(item => item.id === 'properties');
     if (next !== 'animate' && record && record.dock === record.side && !record.active)
-      arrange((arrangement, m) => activatePanel(arrangement, 'properties', {mode: m}));
+      arrange((arrangement, m) => activatePanel(arrangement, 'properties', {mode: m, catalog: registry.constraints()}));
     else commit();
   }
 

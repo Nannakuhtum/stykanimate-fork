@@ -9,6 +9,7 @@ export default Object.freeze({
   "shell.panel.properties": "Properties",
   "shell.panel.vfx": "VFX",
   "shell.panel.library": "Library",
+  "shell.panel.script": "Script",
   "shell.panel.structure": "Structure",
   "shell.panel.timeline": "Timeline"
 });

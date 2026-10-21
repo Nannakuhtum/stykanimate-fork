@@ -59,6 +59,8 @@ import { BrowserRecoverySession, readBrowserRecovery } from './browser-recovery.
 import {DocumentSave, RecoveryDeadline, documentCheckpoint, matchesDocumentCheckpoint} from './document-save.mjs';
 import {createProjectTabsHost} from './project-tabs-host.mjs';
 import {createHome} from './home/home.mjs';
+import {createScriptPanel} from './script/script-panel.mjs';
+import {PANEL_CATALOG, SCRIPT_PANEL} from './shell/panel-registry.mjs';
 import {createTutorials} from './tutorials/tutorials.mjs';
 import {installProjectTabs} from './shell/project-tabs-view.mjs';
 import {createProjectSwitcher} from './shell/project-switcher.mjs';
@@ -6438,6 +6440,7 @@ async function init() {
     // The band's first measurement waits for the editor to be ready where it can (topbar.mjs).
     ready: editorReady,
     touch: touchMode,
+    catalog: [...PANEL_CATALOG, SCRIPT_PANEL],
   });
   workspaceLayout = shell.workspace;
   window.styk.workspace = workspaceLayout;
@@ -6604,6 +6607,20 @@ async function init() {
   });
   $('library-tab')?.addEventListener('click', () => telemetry.count('library'));
   actions['add-to-library'] = () => { telemetry.count('library'); return window.styk.library.run(() => window.styk.library.save()); };
+  // The Script panel (src/script/script-panel.mjs, docs/AGENT-SCRIPTING.md): a script an agent wrote plays as an
+  // ordinary project, reloads when its file changes, and the person's notes go back to the agent beside it.
+  window.styk.script = createScriptPanel({root: $('script-panel'), editor, desktop, t: interfaceText, toast: text => toast(text), fail,
+    openDocument: async (report, name) => {
+      pause();
+      if (!await openProject((session) => editor.load(report, name, session), { blank: true })) return false;
+      fit();
+      return true;
+    },
+    seek: tick => { pause(); editor.seek(tick); },
+    select: uid => { editor.select(uid); queueUI(); }});
+  shell.define({id: 'script', root: () => $('script-panel')});
+  actions['open-script'] = () => { shell.showPanel('script', {focus: false}); return window.styk.script.open(); };
+  void window.styk.script.launch().then(opened => { if (opened) shell.showPanel('script', {focus: false}); }).catch(fail);
   window.styk.movieclips = installMovieclipUI({editor,actions,pause,finishEdit:finishCurrentEdit,
     getTimeline:()=>timelineUI,setTool,onError:fail,queueUI,exportClip:()=>exportFlow.exportPivot('stykmov'),
     // The session breadcrumb sits above the stage until the inspector names the scope (M4).

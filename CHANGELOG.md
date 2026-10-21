@@ -17,6 +17,7 @@ What's new in each version of StykAnimate.
 - A new Home page to start an animation in landscape, vertical or square, reopen your projects and organize them with pins and folders.
 - Five short interactive tutorials that guide you step by step through the canvas, posing, the timeline and the panels.
 - Right-click a joint and choose Disconnect segment to turn that part of a figure into a figure of its own.
+- Open an animation script in the new Script panel to watch it play as a project, reload it as it changes and leave notes for whoever wrote it.
 
 ### Changed
 

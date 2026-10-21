@@ -10,7 +10,7 @@
   "defaults": {"ease": "smooth"},
 
   "poses": {
-    "guard": {"base": "ready", "armR": 100, "forearmR": -70},
+    "guard": {"base": "ready", "armR": 100, "forearmR": -60},
     "windup": {"base": "ready", "torso": -100, "armL": 150, "forearmL": 200, "thighL": 70},
     "uppercut": {"base": "punch", "torso": -70, "armL": -40, "forearmL": -70}
   },

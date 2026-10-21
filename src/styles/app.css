@@ -106,6 +106,7 @@
 @import url("./features/vfx.css");
 @import url("./features/onion.css");
 @import url("./features/library.css");
+@import url("./features/script.css");  /* the Script panel (docs/AGENT-SCRIPTING.md) */
 @import url("./features/audio.css");
 @import url("./features/view-options.css");
 @import url("./features/settings.css");
